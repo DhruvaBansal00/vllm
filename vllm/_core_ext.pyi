@@ -1,5 +1,6 @@
 from typing import Optional, Union
 
+
 class ScalarType:
     """
     ScalarType can represent a wide range of floating point and integer types,

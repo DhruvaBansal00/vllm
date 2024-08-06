@@ -5,6 +5,7 @@ from torch.nn import Parameter
 
 from vllm.model_executor.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme)
+from vllm.model_executor.layers.quantization.utils import replace_parameter
 from vllm.model_executor.layers.quantization.kernels import (
     MPLinearLayerConfig, choose_mp_linear_kernel)
 from vllm.model_executor.utils import set_weight_attrs
@@ -72,7 +73,6 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
         )
 
         kernel_type = choose_mp_linear_kernel(mp_linear_kernel_config)
-        self.kernel = kernel_type(mp_linear_kernel_config)
 
         # If group_size is -1, we are in channelwise case.
         channelwise = (self.group_size == -1)
@@ -107,7 +107,6 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
                 "pack_factor": self.pack_factor,
                 "weight_loader": weight_loader
             })
-        layer.register_parameter("weight_packed", weight)
 
         weight_scale = Parameter(
             torch.empty(
@@ -124,22 +123,44 @@ class CompressedTensorsWNA16(CompressedTensorsScheme):
                 "input_dim": weight_scale_dim,
                 "output_dim": 0
             })
-        layer.register_parameter("weight_scale", weight_scale)
 
         # A 2D array defining the original shape of the weights
         # before packing
         weight_shape = Parameter(torch.empty(2, dtype=torch.int64),
                                  requires_grad=False)
 
-        layer.register_parameter("weight_shape", weight_shape)
         set_weight_attrs(weight_shape, {
             "weight_loader": weight_loader,
             "ignore_warning": True,
         })
 
+        layer.register_parameter("weight_packed", weight)
+        layer.register_parameter("weight_scale", weight_scale)
+        layer.register_parameter("weight_shape", weight_shape)
+
+        self.kernel = kernel_type(mp_linear_kernel_config,
+                                  w_q_param_name="weight_packed",
+                                  w_s_param_name="weight_scale",
+                                  w_zp_param_name=None,
+                                  w_gidx_param_name=None)
+
     # Checkpoints are serialized in compressed-tensors format, which is
     # different from the format the kernel may want. Handle repacking here.
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        # convert `weight_packed` from:
+        #  {input_dim = 1, output_dim = 0, packed_dim = 1}
+        # to:
+        #  {input_dim = 0, output_dim = 1, packed_dim = 0}
+        # expected the kernels `process_weights_after_loading`
+        replace_parameter(layer, "weight_packed", layer.weight_packed.t())
+
+        # convert `weight_scale` from:
+        #  {input_dim = 1, output_dim = 0}
+        # to:
+        #  {input_dim = 0, output_dim = 1}
+        # expected the kernels `process_weights_after_loading`
+        replace_parameter(layer, "weight_scale", layer.weight_scale.t())
+
         self.kernel.process_weights_after_loading(layer)
 
     def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor,

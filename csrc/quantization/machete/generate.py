@@ -7,14 +7,11 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import jinja2
-from vllm_cutlass_library_extension import (DataType, EpilogueScheduleTag,
-                                            EpilogueScheduleType,
-                                            MixedInputKernelScheduleType,
-                                            TileSchedulerType, VLLMDataType,
-                                            VLLMDataTypeNames, VLLMDataTypeTag,
-                                            VLLMKernelScheduleTag,
-                                            VLLMTileSchedulerTag,
-                                            VLLMTileSchedulerType)
+from vllm_cutlass_library_extension import (
+    DataType, EpilogueScheduleTag, EpilogueScheduleType,
+    MixedInputKernelScheduleType, TileSchedulerType, VLLMDataType,
+    VLLMDataTypeNames, VLLMDataTypeTag, VLLMKernelScheduleTag,
+    VLLMTileSchedulerTag, VLLMTileSchedulerType)
 
 #
 #   Generator templating
